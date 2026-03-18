@@ -11,6 +11,7 @@ import Strompreise from './pages/Strompreise.jsx'
 import Batterietabellen from './pages/Batterietabellen.jsx'
 import Kennzahlen from './pages/Kennzahlen.jsx'
 import Sidebar from './components/Sidebar.jsx'
+import Login from './pages/Login.jsx'
 
 export const AppContext = createContext(null)
 
@@ -19,17 +20,29 @@ export function useApp() {
 }
 
 export default function App() {
+  const [user, setUser] = useState(() => localStorage.getItem('pv_user') || null)
   const [params, setParams] = useState(null)
   const [results, setResults] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const debounceRef = useRef(null)
 
+  function handleLogin(username) {
+    localStorage.setItem('pv_user', username)
+    setUser(username)
+  }
+
+  function handleLogout() {
+    localStorage.removeItem('pv_user')
+    setUser(null)
+  }
+
   useEffect(() => {
+    if (!user) return
     getDefaults().then(defaults => {
       setParams(defaults)
     }).catch(e => setError(e.message))
-  }, [])
+  }, [user])
 
   useEffect(() => {
     if (!params) return
@@ -64,11 +77,15 @@ export default function App() {
     if (params) runCalculation(params)
   }, [params])
 
+  if (!user) {
+    return <Login onLogin={handleLogin} />
+  }
+
   return (
     <AppContext.Provider value={{ params, setParams: updateParams, results, loading, error, forceCalculate }}>
       <BrowserRouter>
         <div style={{ display: 'flex', minHeight: '100vh' }}>
-          <Sidebar />
+          <Sidebar user={user} onLogout={handleLogout} />
           <main style={{ flex: 1, overflowY: 'auto', padding: '48px 48px 48px 32px' }}>
             {error && (
               <div style={{

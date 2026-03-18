@@ -44,6 +44,36 @@ const styles = {
     textTransform: 'uppercase',
     padding: '4px 20px 8px',
   },
+  userBar: {
+    marginTop: 'auto',
+    borderTop: '1px solid #e8e8ed',
+    padding: '16px 20px',
+  },
+  userName: {
+    fontSize: 12,
+    fontWeight: 500,
+    color: '#1d1d1f',
+    marginBottom: 2,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  userRole: {
+    fontSize: 11,
+    color: '#86868b',
+    marginBottom: 10,
+  },
+  logoutBtn: {
+    width: '100%',
+    padding: '7px 0',
+    background: 'transparent',
+    border: '1px solid #d2d2d7',
+    borderRadius: 6,
+    fontSize: 12,
+    color: '#86868b',
+    cursor: 'pointer',
+    transition: 'border-color 0.15s, color 0.15s',
+  },
 }
 
 function NavItem({ to, label }) {
@@ -67,7 +97,7 @@ function NavItem({ to, label }) {
   )
 }
 
-export default function Sidebar() {
+export default function Sidebar({ user, onLogout }) {
   return (
     <nav style={styles.sidebar}>
       <div style={styles.logo}>
@@ -98,6 +128,19 @@ export default function Sidebar() {
         <NavItem to="/strompreise" label="Strompreise" />
         <NavItem to="/batterietabellen" label="Batterietabellen" />
         <NavItem to="/kennzahlen" label="Kennzahlen" />
+      </div>
+
+      <div style={styles.userBar}>
+        <div style={styles.userName}>{user}</div>
+        <div style={styles.userRole}>Admin</div>
+        <button
+          style={styles.logoutBtn}
+          onClick={onLogout}
+          onMouseEnter={e => { e.target.style.borderColor = '#0071e3'; e.target.style.color = '#0071e3' }}
+          onMouseLeave={e => { e.target.style.borderColor = '#d2d2d7'; e.target.style.color = '#86868b' }}
+        >
+          Abmelden
+        </button>
       </div>
     </nav>
   )
