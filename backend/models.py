@@ -1,24 +1,25 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Field
+from typing import Optional, Literal
 
 
 class GeneralParams(BaseModel):
-    achsenabschnitt: float = 0.056
-    preisinflation: float = 0.02
-    s_amplitude: float = 0.8
+    achsenabschnitt: float = Field(0.056, ge=0.001, le=1.0)
+    preisinflation: float = Field(0.02, ge=-0.1, le=0.5)
+    preiswachstum_modus: Literal["exponentiell", "linear"] = "exponentiell"
+    s_amplitude: float = Field(0.8, ge=0.0, le=2.0)
     phi: float = 0.0
-    upper_spread: float = 0.60
-    lower_spread: float = 0.25
-    kalkulationszins: float = 0.08
-    ek_zins: float = 0.146
-    zinssatz_1_10: float = 0.039
-    zinssatz_11_20: float = 0.046
-    kosten_zinscap: float = 49_500.0
-    opex_inflation: float = 0.02
-    degradationsfaktor: float = 0.000166859755278
-    profit_share: float = 0.90
-    dscr_min: float = 1.0876790873350235
-    max_zyklen: float = 4.5
+    upper_spread: float = Field(0.60, ge=0.0, le=2.0)
+    lower_spread: float = Field(0.25, ge=0.0, le=1.0)
+    kalkulationszins: float = Field(0.08, ge=0.0, le=0.5)
+    ek_zins: float = Field(0.146, ge=0.0, le=0.5)
+    zinssatz_1_10: float = Field(0.039, ge=0.0, le=0.3)
+    zinssatz_11_20: float = Field(0.046, ge=0.0, le=0.3)
+    kosten_zinscap: float = Field(49_500.0, ge=0.0)
+    opex_inflation: float = Field(0.02, ge=0.0, le=0.2)
+    degradationsfaktor: float = Field(0.000166859755278, ge=0.0, le=0.01)
+    profit_share: float = Field(0.90, ge=0.0, le=1.0)
+    dscr_min: float = Field(1.0876790873350235, ge=1.0, le=3.0)
+    max_zyklen: float = Field(4.5, ge=0.1, le=10.0)
 
 
 class PSParams(BaseModel):

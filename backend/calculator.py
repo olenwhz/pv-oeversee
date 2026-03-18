@@ -72,11 +72,16 @@ def calc_production(params: GeneralParams) -> list:
 
 def calc_spot_prices(params: GeneralParams) -> list:
     result = []
+    linear = getattr(params, 'preiswachstum_modus', 'exponentiell') == 'linear'
     for year in range(1, 31):
         monthly = []
         for m in range(12):
             t = (year - 1) * 12 + m
-            spot = params.achsenabschnitt * (1 + params.preisinflation / 12) ** t * SEASONAL_MULT[m]
+            if linear:
+                growth = 1 + params.preisinflation * t / 12
+            else:
+                growth = (1 + params.preisinflation / 12) ** t
+            spot = params.achsenabschnitt * growth * SEASONAL_MULT[m]
             monthly.append(spot)
         result.append({
             "year": year,
@@ -132,12 +137,7 @@ def should_replace_battery(hm_key: str, current_year: int, current_capacity: flo
             extra_sales = max(0.0, bat_new - bat_old)
 
             if extra_sales > 0:
-                weighted_price = spot_m * (
-                    ps.upper_bat * (1 + g.upper_spread) +
-                    ps.middle_bat +
-                    ps.lower_bat * (1 - g.lower_spread)
-                )
-                extra_rev_m = extra_sales * weighted_price * g.profit_share
+                extra_rev_m = extra_sales * bat_weighted_price(spot_m, g, ps) * g.profit_share
                 time_offset = offset + m / 12
                 npv_extra += extra_rev_m / (1 + g.kalkulationszins) ** time_offset
 
@@ -202,6 +202,31 @@ def calc_battery(params: GeneralParams, hm_key: str, hm_params: dict, hme_params
     }
 
 
+def bat_weighted_price(spot: float, params: GeneralParams, ps: PSParams) -> float:
+    """Gewichteter Batteriepreis über Upper/Middle/Lower-Bänder."""
+    return spot * (
+        ps.upper_bat * (1 + params.upper_spread) +
+        ps.middle_bat +
+        ps.lower_bat * (1 - params.lower_spread)
+    )
+
+
+def pv_weighted_price(spot: float, params: GeneralParams, ps: PSParams) -> float:
+    """Gewichteter PV-Preis über Upper/Middle/Lower-Bänder."""
+    return spot * (
+        ps.upper_pv * (1 + params.upper_spread) +
+        ps.middle_pv +
+        ps.lower_pv * (1 - params.lower_spread)
+    )
+
+
+def split_bat_pv(prod_m: float, cap: float, zyklen_day: float) -> tuple[float, float]:
+    """Aufteilen der Produktion in Batterie- und PV-Strom."""
+    bat = min(prod_m, cap * zyklen_day * DAYS_PER_MONTH)
+    pv = prod_m - bat
+    return bat, pv
+
+
 def calc_erloes(
     year: int, hm_key: str,
     prod_monthly: list, spot_monthly: list,
@@ -222,47 +247,27 @@ def calc_erloes(
         elif hm_key == 'hm2':
             return sum(prod_monthly) * EEG_GUARANTEED
         elif hm_key == 'hm3':
-            total = 0
+            total = 0.0
             for m in range(12):
-                cap = bat_monthly_caps[m]
-                bat_s = min(prod_monthly[m], cap * zyklen_day * DAYS_PER_MONTH)
-                rest = prod_monthly[m] - bat_s
-                wb = spot_monthly[m] * (ps.upper_bat * (1 + params.upper_spread) + ps.middle_bat + ps.lower_bat * (1 - params.lower_spread))
-                total += bat_s * wb * params.profit_share
+                bat_s, rest = split_bat_pv(prod_monthly[m], bat_monthly_caps[m], zyklen_day)
+                total += bat_s * bat_weighted_price(spot_monthly[m], params, ps) * params.profit_share
                 total += rest * hm_p['fix_verguetung_pv_11_20']
             return total
-        elif hm_key == 'hm4':
-            total = 0
+        elif hm_key in ('hm4', 'hm5'):
+            total = 0.0
             for m in range(12):
-                cap = bat_monthly_caps[m]
-                bat_s = min(prod_monthly[m], cap * zyklen_day * DAYS_PER_MONTH)
-                rest = prod_monthly[m] - bat_s
+                bat_s, rest = split_bat_pv(prod_monthly[m], bat_monthly_caps[m], zyklen_day)
                 sp = spot_monthly[m]
                 eeg_comp = prod_monthly[m] * max(0, EEG_GUARANTEED - sp)
-                wb = sp * (ps.upper_bat * (1 + params.upper_spread) + ps.middle_bat + ps.lower_bat * (1 - params.lower_spread))
-                wp = sp * (ps.upper_pv * (1 + params.upper_spread) + ps.middle_pv + ps.lower_pv * (1 - params.lower_spread))
-                total += eeg_comp + bat_s * wb * params.profit_share + rest * wp * params.profit_share
-            return total
-        elif hm_key == 'hm5':
-            total = 0
-            for m in range(12):
-                cap = bat_monthly_caps[m]
-                bat_s = min(prod_monthly[m], cap * zyklen_day * DAYS_PER_MONTH)
-                rest = prod_monthly[m] - bat_s
-                sp = spot_monthly[m]
-                eeg_comp = prod_monthly[m] * max(0, EEG_GUARANTEED - sp)
-                wb = sp * (ps.upper_bat * (1 + params.upper_spread) + ps.middle_bat + ps.lower_bat * (1 - params.lower_spread))
-                wp = sp * (ps.upper_pv * (1 + params.upper_spread) + ps.middle_pv + ps.lower_pv * (1 - params.lower_spread))
-                total += eeg_comp + bat_s * wb * params.profit_share + rest * wp * params.profit_share
+                total += eeg_comp
+                total += bat_s * bat_weighted_price(sp, params, ps) * params.profit_share
+                total += rest * pv_weighted_price(sp, params, ps) * params.profit_share
             return total
         elif hm_key == 'hm6':
-            total = 0
+            total = 0.0
             for m in range(12):
-                cap = bat_monthly_caps[m]
-                bat_s = min(prod_monthly[m], cap * zyklen_day * DAYS_PER_MONTH)
-                rest = prod_monthly[m] - bat_s
-                wb = spot_monthly[m] * (ps.upper_bat * (1 + params.upper_spread) + ps.middle_bat + ps.lower_bat * (1 - params.lower_spread))
-                total += bat_s * wb * params.profit_share
+                bat_s, rest = split_bat_pv(prod_monthly[m], bat_monthly_caps[m], zyklen_day)
+                total += bat_s * bat_weighted_price(spot_monthly[m], params, ps) * params.profit_share
                 total += rest * hm_p['fix_verguetung_pv_11_20']
             return total
 
@@ -271,25 +276,19 @@ def calc_erloes(
         if hme_key == 'hme1':
             return sum(prod_monthly) * hme_p['dv_bonus']
         elif hme_key == 'hme2':
-            total = 0
+            total = 0.0
             for m in range(12):
-                cap = bat_monthly_caps[m]
-                bat_s = min(prod_monthly[m], cap * zyklen_day * DAYS_PER_MONTH)
-                rest = prod_monthly[m] - bat_s
-                wb = spot_monthly[m] * (ps.upper_bat * (1 + params.upper_spread) + ps.middle_bat + ps.lower_bat * (1 - params.lower_spread))
-                total += bat_s * wb * params.profit_share
+                bat_s, rest = split_bat_pv(prod_monthly[m], bat_monthly_caps[m], zyklen_day)
+                total += bat_s * bat_weighted_price(spot_monthly[m], params, ps) * params.profit_share
                 total += rest * hme_p['fix_verguetung_pv']
             return total
         elif hme_key == 'hme3':
-            total = 0
+            total = 0.0
             for m in range(12):
-                cap = bat_monthly_caps[m]
-                bat_s = min(prod_monthly[m], cap * zyklen_day * DAYS_PER_MONTH)
-                rest = prod_monthly[m] - bat_s
+                bat_s, rest = split_bat_pv(prod_monthly[m], bat_monthly_caps[m], zyklen_day)
                 sp = spot_monthly[m]
-                wb = sp * (ps.upper_bat * (1 + params.upper_spread) + ps.middle_bat + ps.lower_bat * (1 - params.lower_spread))
-                wp = sp * (ps.upper_pv * (1 + params.upper_spread) + ps.middle_pv + ps.lower_pv * (1 - params.lower_spread))
-                total += bat_s * wb * params.profit_share + rest * wp * params.profit_share
+                total += bat_s * bat_weighted_price(sp, params, ps) * params.profit_share
+                total += rest * pv_weighted_price(sp, params, ps) * params.profit_share
             return total
 
     return 0.0
@@ -524,6 +523,7 @@ def calc_full_hm(hm_key: str, params: AllParams) -> dict:
 
             afa = AFA_PA if year <= 20 else 0.0
             debt = calc_debt(year, general)
+            infl = (1 + general.opex_inflation) ** (year - 1)
 
             ydata = calc_year_financials(erloes, opex, afa, debt["zinsen"], debt["tilgung"])
             ydata["year"] = year
@@ -531,6 +531,16 @@ def calc_full_hm(hm_key: str, params: AllParams) -> dict:
             ydata["restschuld_anfang"] = debt["restschuld_anfang"]
             ydata["restschuld_ende"] = debt["restschuld_ende"]
             ydata["kapitaldienst"] = debt["kapitaldienst"]
+            ydata["opex_breakdown"] = {
+                "betrieb": OPEX_BASE["betrieb"] * infl,
+                "verwaltung": OPEX_BASE["verwaltung"] * infl,
+                "gruenpflege": OPEX_BASE["gruenpflege"] * infl,
+                "eigenstrom": OPEX_BASE["eigenstrom"] * infl,
+                "versicherung": OPEX_BASE["versicherung"] * infl,
+                "pacht": OPEX_BASE["pacht"],
+                "dv_kosten": dv_kosten,
+                "ersatz": ersatz_inv,
+            }
             years_data.append(ydata)
         return years_data
 
@@ -553,4 +563,10 @@ def calc_full_hm(hm_key: str, params: AllParams) -> dict:
         "monthly_production": [p["monthly_kwh"] for p in production],
         "prices": [p["avg_spot"] for p in prices],
         "monthly_prices": [p["monthly_spot"] for p in prices],
+        "constants": {
+            "capex": CAPEX,
+            "darlehen": DARLEHEN,
+            "eigenkapital": EIGENKAPITAL,
+            "kosten_zinscap": general.kosten_zinscap,
+        },
     }

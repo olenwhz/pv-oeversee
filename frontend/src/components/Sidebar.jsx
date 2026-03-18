@@ -4,15 +4,17 @@ import { NavLink } from 'react-router-dom'
 const styles = {
   sidebar: {
     width: 240,
-    minHeight: '100vh',
+    height: '100vh',
     background: '#ffffff',
     borderRight: '1px solid #e8e8ed',
     padding: '24px 0',
     display: 'flex',
     flexDirection: 'column',
-    position: 'sticky',
+    position: 'fixed',
     top: 0,
+    left: 0,
     overflowY: 'auto',
+    zIndex: 100,
   },
   logo: {
     padding: '0 20px 24px',
@@ -128,6 +130,11 @@ export default function Sidebar({ user, onLogout }) {
         <NavItem to="/strompreise" label="Strompreise" />
         <NavItem to="/batterietabellen" label="Batterietabellen" />
         <NavItem to="/kennzahlen" label="Kennzahlen" />
+      </div>
+
+      <div style={styles.section}>
+        <div style={styles.sectionLabel}>System</div>
+        <NavItem to="/activity" label="Aktivitätslog" />
       </div>
 
       <div style={styles.userBar}>

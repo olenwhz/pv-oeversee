@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, useNavigate } from 'react-router-dom'
-import { getDefaults, calculate } from './api/client.js'
+import { getDefaults, calculate, logActivity } from './api/client.js'
 import Dashboard from './pages/Dashboard.jsx'
 import Parameters from './pages/Parameters.jsx'
 import Optimierungen from './pages/Optimierungen.jsx'
@@ -10,6 +10,7 @@ import Ertraege from './pages/Ertraege.jsx'
 import Strompreise from './pages/Strompreise.jsx'
 import Batterietabellen from './pages/Batterietabellen.jsx'
 import Kennzahlen from './pages/Kennzahlen.jsx'
+import Activity from './pages/Activity.jsx'
 import Sidebar from './components/Sidebar.jsx'
 import Login from './pages/Login.jsx'
 
@@ -30,9 +31,11 @@ export default function App() {
   function handleLogin(username) {
     localStorage.setItem('pv_user', username)
     setUser(username)
+    logActivity('login', username)
   }
 
   function handleLogout() {
+    logActivity('logout', user || '')
     localStorage.removeItem('pv_user')
     setUser(null)
   }
@@ -86,7 +89,7 @@ export default function App() {
       <BrowserRouter>
         <div style={{ display: 'flex', minHeight: '100vh' }}>
           <Sidebar user={user} onLogout={handleLogout} />
-          <main style={{ flex: 1, overflowY: 'auto', padding: '48px 48px 48px 32px' }}>
+          <main style={{ marginLeft: 240, flex: 1, minHeight: '100vh', overflowY: 'auto', padding: '48px 48px 48px 32px' }}>
             {error && (
               <div style={{
                 background: '#fff0f0', border: '1px solid #ffc0c0', borderRadius: 8,
@@ -105,6 +108,7 @@ export default function App() {
               <Route path="/strompreise" element={<Strompreise />} />
               <Route path="/batterietabellen" element={<Batterietabellen />} />
               <Route path="/kennzahlen" element={<Kennzahlen />} />
+              <Route path="/activity" element={<Activity />} />
             </Routes>
           </main>
         </div>
