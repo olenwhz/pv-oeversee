@@ -7,6 +7,47 @@ const USERS = {
   'gavin.matthiesen': '1234',
 }
 
+const inputStyle = {
+  width: '100%',
+  padding: '10px 12px',
+  border: '1px solid #d2d2d7',
+  borderRadius: 8,
+  fontSize: 14,
+  color: '#1d1d1f',
+  outline: 'none',
+  boxSizing: 'border-box',
+  background: '#fafafa',
+  transition: 'border-color 0.15s',
+}
+
+const labelStyle = {
+  display: 'block',
+  fontSize: 12,
+  fontWeight: 500,
+  color: '#86868b',
+  marginBottom: 6,
+  letterSpacing: '0.04em',
+  textTransform: 'uppercase',
+}
+
+function FormInput({ label, type, value, onChange, autoComplete, autoFocus }) {
+  return (
+    <div>
+      <label style={labelStyle}>{label}</label>
+      <input
+        type={type}
+        value={value}
+        onChange={onChange}
+        autoComplete={autoComplete}
+        autoFocus={autoFocus}
+        style={inputStyle}
+        onFocus={e => e.target.style.borderColor = '#0071e3'}
+        onBlur={e => e.target.style.borderColor = '#d2d2d7'}
+      />
+    </div>
+  )
+}
+
 export default function Login({ onLogin }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -14,11 +55,16 @@ export default function Login({ onLogin }) {
 
   function handleSubmit(e) {
     e.preventDefault()
-    if (USERS[username] && USERS[username] === password) {
+    const stored = USERS[username]
+    if (stored === password) {
       onLogin(username)
     } else {
       setError('Benutzername oder Passwort falsch.')
     }
+  }
+
+  function clearError() {
+    if (error) setError('')
   }
 
   return (
@@ -46,55 +92,22 @@ export default function Login({ onLogin }) {
 
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#86868b', marginBottom: 6, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-              Benutzername
-            </label>
-            <input
+            <FormInput
+              label="Benutzername"
               type="text"
               value={username}
-              onChange={e => { setUsername(e.target.value); setError('') }}
+              onChange={e => { setUsername(e.target.value); clearError() }}
               autoComplete="username"
               autoFocus
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: '1px solid #d2d2d7',
-                borderRadius: 8,
-                fontSize: 14,
-                color: '#1d1d1f',
-                outline: 'none',
-                boxSizing: 'border-box',
-                background: '#fafafa',
-                transition: 'border-color 0.15s',
-              }}
-              onFocus={e => e.target.style.borderColor = '#0071e3'}
-              onBlur={e => e.target.style.borderColor = '#d2d2d7'}
             />
           </div>
-
           <div style={{ marginBottom: 24 }}>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#86868b', marginBottom: 6, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-              Passwort
-            </label>
-            <input
+            <FormInput
+              label="Passwort"
               type="password"
               value={password}
-              onChange={e => { setPassword(e.target.value); setError('') }}
+              onChange={e => { setPassword(e.target.value); clearError() }}
               autoComplete="current-password"
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: '1px solid #d2d2d7',
-                borderRadius: 8,
-                fontSize: 14,
-                color: '#1d1d1f',
-                outline: 'none',
-                boxSizing: 'border-box',
-                background: '#fafafa',
-                transition: 'border-color 0.15s',
-              }}
-              onFocus={e => e.target.style.borderColor = '#0071e3'}
-              onBlur={e => e.target.style.borderColor = '#d2d2d7'}
             />
           </div>
 
