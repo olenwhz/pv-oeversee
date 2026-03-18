@@ -50,7 +50,6 @@ class HM3Params(BaseModel):
 class HM4Params(BaseModel):
     dv_bonus_1_10: float = 0.023
     dv_kosten_11_20: float = 0.0
-    zyklen_11_20: float = 4.5
 
 
 class HM5Params(BaseModel):
@@ -65,6 +64,7 @@ class HM6Params(BaseModel):
     zyklen_11_20: float = 4.5
     fix_verguetung_pv_11_20: float = 0.27707729
     dv_kosten_11_20: float = 45_000.0
+    untergrenze_kapazitaet: float = 5970.31
 
 
 class HME1Params(BaseModel):

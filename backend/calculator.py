@@ -88,7 +88,7 @@ def calc_spot_prices(params: GeneralParams) -> list:
     return result
 
 
-def calc_battery(params: GeneralParams, hm_key: str, hm_params: dict, hme_params: dict) -> dict:
+def calc_battery(params: GeneralParams, hm_key: str, hm_params: dict, hme_params: dict, allow_ersatz: bool = True) -> dict:
     start_cap = 8000.0 if hm_key in ('hm1', 'hm2', 'hm3') else 8128.0
     cap = start_cap
     monthly_caps = []
@@ -96,15 +96,9 @@ def calc_battery(params: GeneralParams, hm_key: str, hm_params: dict, hme_params
     ersatz_kosten = 0.0
 
     def get_zyklen(year):
-        if hm_key in ('hm1', 'hm2', 'hm3'):
+        # HM4: immer 1.23 (Innovationsausschreibung — keine Zyklenerhöhung erlaubt)
+        if hm_key in ('hm1', 'hm2', 'hm3', 'hm4'):
             return 1.23
-        elif hm_key == 'hm4':
-            if year <= 10:
-                return 1.23
-            elif year <= 20:
-                return hm_params.get('zyklen_11_20', 4.5)
-            else:
-                return hme_params.get('zyklen', 1.23)
         elif hm_key == 'hm5':
             if year <= 10:
                 return 1.23
@@ -128,7 +122,8 @@ def calc_battery(params: GeneralParams, hm_key: str, hm_params: dict, hme_params
             year_caps.append(cap)
             cap = cap * (1 - PER_CYCLE_DEGRAD * zyklen) ** DAYS_PER_MONTH
 
-            if hm_key == 'hm5' and cap < hm_params.get('untergrenze_kapazitaet', 5970.31) and ersatz_jahr is None:
+            # HM5/HM6: Ersatzinvestition optional — nur wenn allow_ersatz=True
+            if allow_ersatz and hm_key in ('hm5', 'hm6') and cap < hm_params.get('untergrenze_kapazitaet', 5970.31) and ersatz_jahr is None:
                 ersatz_jahr = year
                 ersatz_kosten = SPEICHER_ERSATZ_KOSTEN
                 cap = 8128.0
@@ -422,64 +417,75 @@ def calc_full_hm(hm_key: str, params: AllParams) -> dict:
 
     production = calc_production(general)
     prices = calc_spot_prices(general)
-    battery = calc_battery(general, hm_key, hm_p, hme_p)
 
-    years_data = []
-    for year in range(1, 31):
-        yi = year - 1
-        prod_monthly = production[yi]["monthly_kwh"]
-        spot_monthly = prices[yi]["monthly_spot"]
-        bat_caps = battery["monthly_caps"][yi]
-
-        def get_zyklen_day(yr):
-            if hm_key in ('hm1', 'hm2', 'hm3'):
-                return 1.23
-            elif hm_key == 'hm4':
-                if yr <= 10:
-                    return 1.23
-                elif yr <= 20:
-                    return hm_p.get('zyklen_11_20', 4.5)
-                else:
-                    return hme_p.get('zyklen', 1.23)
-            elif hm_key == 'hm5':
-                if yr <= 10:
-                    return 1.23
-                elif yr <= 20:
-                    return hm_p.get('zyklen_11_20', 1.23)
-                else:
-                    return hme_p.get('zyklen', 1.23)
-            elif hm_key == 'hm6':
-                if yr <= 10:
-                    return 1.23
-                elif yr <= 20:
-                    return hm_p.get('zyklen_11_20', 4.5)
-                else:
-                    return hme_p.get('zyklen', 1.23)
+    def get_zyklen_day(yr):
+        # HM4: immer 1.23 (Innovationsausschreibung — keine Zyklenerhöhung erlaubt)
+        if hm_key in ('hm1', 'hm2', 'hm3', 'hm4'):
             return 1.23
+        elif hm_key == 'hm5':
+            if yr <= 10:
+                return 1.23
+            elif yr <= 20:
+                return hm_p.get('zyklen_11_20', 1.23)
+            else:
+                return hme_p.get('zyklen', 1.23)
+        elif hm_key == 'hm6':
+            if yr <= 10:
+                return 1.23
+            elif yr <= 20:
+                return hm_p.get('zyklen_11_20', 4.5)
+            else:
+                return hme_p.get('zyklen', 1.23)
+        return 1.23
 
-        zyklen_day = get_zyklen_day(year)
+    def run_years(battery):
+        years_data = []
+        for year in range(1, 31):
+            yi = year - 1
+            prod_monthly = production[yi]["monthly_kwh"]
+            spot_monthly = prices[yi]["monthly_spot"]
+            bat_caps = battery["monthly_caps"][yi]
+            zyklen_day = get_zyklen_day(year)
 
-        erloes = calc_erloes(
-            year, hm_key,
-            prod_monthly, spot_monthly, bat_caps,
-            general, ps, hm_p, hme_p, zyklen_day
-        )
+            erloes = calc_erloes(
+                year, hm_key,
+                prod_monthly, spot_monthly, bat_caps,
+                general, ps, hm_p, hme_p, zyklen_day
+            )
 
-        ersatz_inv = battery["ersatz_kosten"] if battery["ersatz_jahr"] == year else 0.0
+            ersatz_inv = battery["ersatz_kosten"] if battery["ersatz_jahr"] == year else 0.0
+            dv_kosten = calc_dv_kosten(year, hm_key, hm_p, hme_p)
+            opex = calc_opex(year, general, dv_kosten, ersatz_inv)
 
-        dv_kosten = calc_dv_kosten(year, hm_key, hm_p, hme_p)
-        opex = calc_opex(year, general, dv_kosten, ersatz_inv)
+            afa = AFA_PA if year <= 20 else 0.0
+            debt = calc_debt(year, general)
 
-        afa = AFA_PA if year <= 20 else 0.0
-        debt = calc_debt(year, general)
+            ydata = calc_year_financials(erloes, opex, afa, debt["zinsen"], debt["tilgung"])
+            ydata["year"] = year
+            ydata["production"] = production[yi]["annual_kwh"]
+            ydata["restschuld_anfang"] = debt["restschuld_anfang"]
+            ydata["restschuld_ende"] = debt["restschuld_ende"]
+            ydata["kapitaldienst"] = debt["kapitaldienst"]
+            years_data.append(ydata)
+        return years_data
 
-        ydata = calc_year_financials(erloes, opex, afa, debt["zinsen"], debt["tilgung"])
-        ydata["year"] = year
-        ydata["production"] = production[yi]["annual_kwh"]
-        ydata["restschuld_anfang"] = debt["restschuld_anfang"]
-        ydata["restschuld_ende"] = debt["restschuld_ende"]
-        ydata["kapitaldienst"] = debt["kapitaldienst"]
-        years_data.append(ydata)
+    # HM5/HM6: Ersatzinvestition ist optional — berechne beide Szenarien und wähle das bessere
+    if hm_key in ('hm5', 'hm6'):
+        battery_no = calc_battery(general, hm_key, hm_p, hme_p, allow_ersatz=False)
+        battery_yes = calc_battery(general, hm_key, hm_p, hme_p, allow_ersatz=True)
+        years_no = run_years(battery_no)
+        years_yes = run_years(battery_yes)
+        npv_no = sum(y["cf_tilgung"] for y in years_no)
+        npv_yes = sum(y["cf_tilgung"] for y in years_yes)
+        if npv_yes > npv_no:
+            battery = battery_yes
+            years_data = years_yes
+        else:
+            battery = battery_no
+            years_data = years_no
+    else:
+        battery = calc_battery(general, hm_key, hm_p, hme_p)
+        years_data = run_years(battery)
 
     kpis = calc_kpis(years_data, general)
 
