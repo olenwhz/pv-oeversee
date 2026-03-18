@@ -88,7 +88,67 @@ def calc_spot_prices(params: GeneralParams) -> list:
     return result
 
 
-def calc_battery(params: GeneralParams, hm_key: str, hm_params: dict, hme_params: dict, allow_ersatz: bool = True) -> dict:
+def should_replace_battery(hm_key: str, current_year: int, current_capacity: float,
+                            all_params, prod_data: list, spot_data: list) -> bool:
+    """
+    Wirtschaftlichkeitsprüfung für Ersatzinvestition (HM5/HM6).
+    Vergleicht NPV der Mehrerlöse durch neue Batterie (8128 kWh) vs. degradierter
+    Kapazität gegen die Ersatzkosten (2.926.080 €).
+    Gibt True zurück wenn Ersatz sich lohnt.
+    """
+    g = all_params.general
+    ps = all_params.ps
+
+    if hm_key == 'hm5':
+        hm_p = all_params.hm5
+        hme_p = all_params.hme2
+    else:  # hm6
+        hm_p = all_params.hm6
+        hme_p = all_params.hme3
+
+    cap_new = 8128.0
+    cap_old = current_capacity
+    npv_extra = 0.0
+
+    for offset in range(30 - current_year + 1):
+        year = current_year + offset
+        if year > 30:
+            break
+        year_idx = year - 1
+
+        if year <= 10:
+            zyklen = 1.23
+        elif year <= 20:
+            zyklen = hm_p.zyklen_11_20
+        else:
+            zyklen = hme_p.zyklen
+
+        for m in range(12):
+            prod_m = prod_data[year_idx]["monthly_kwh"][m]
+            spot_m = spot_data[year_idx]["monthly_spot"][m]
+
+            bat_new = min(prod_m, cap_new * zyklen * DAYS_PER_MONTH)
+            bat_old = min(prod_m, cap_old * zyklen * DAYS_PER_MONTH)
+            extra_sales = max(0.0, bat_new - bat_old)
+
+            if extra_sales > 0:
+                weighted_price = spot_m * (
+                    ps.upper_bat * (1 + g.upper_spread) +
+                    ps.middle_bat +
+                    ps.lower_bat * (1 - g.lower_spread)
+                )
+                extra_rev_m = extra_sales * weighted_price * g.profit_share
+                time_offset = offset + m / 12
+                npv_extra += extra_rev_m / (1 + g.kalkulationszins) ** time_offset
+
+            cap_new *= (1 - PER_CYCLE_DEGRAD * zyklen) ** DAYS_PER_MONTH
+            cap_old *= (1 - PER_CYCLE_DEGRAD * zyklen) ** DAYS_PER_MONTH
+
+    return npv_extra >= SPEICHER_ERSATZ_KOSTEN
+
+
+def calc_battery(params: GeneralParams, hm_key: str, hm_params: dict, hme_params: dict,
+                 prod_data: list = None, spot_data: list = None, all_params=None) -> dict:
     start_cap = 8000.0 if hm_key in ('hm1', 'hm2', 'hm3') else 8128.0
     cap = start_cap
     monthly_caps = []
@@ -122,11 +182,16 @@ def calc_battery(params: GeneralParams, hm_key: str, hm_params: dict, hme_params
             year_caps.append(cap)
             cap = cap * (1 - PER_CYCLE_DEGRAD * zyklen) ** DAYS_PER_MONTH
 
-            # HM5/HM6: Ersatzinvestition optional — nur wenn allow_ersatz=True
-            if allow_ersatz and hm_key in ('hm5', 'hm6') and cap < hm_params.get('untergrenze_kapazitaet', 5970.31) and ersatz_jahr is None:
-                ersatz_jahr = year
-                ersatz_kosten = SPEICHER_ERSATZ_KOSTEN
-                cap = 8128.0
+            # HM5/HM6: Ersatzinvestition nur wenn wirtschaftlich sinnvoll
+            if (hm_key in ('hm5', 'hm6')
+                    and cap < hm_params.get('untergrenze_kapazitaet', 5970.31)
+                    and ersatz_jahr is None
+                    and all_params is not None
+                    and prod_data is not None and spot_data is not None):
+                if should_replace_battery(hm_key, year, cap, all_params, prod_data, spot_data):
+                    ersatz_jahr = year
+                    ersatz_kosten = SPEICHER_ERSATZ_KOSTEN
+                    cap = 8128.0
 
         monthly_caps.append(year_caps)
 
@@ -469,23 +534,10 @@ def calc_full_hm(hm_key: str, params: AllParams) -> dict:
             years_data.append(ydata)
         return years_data
 
-    # HM5/HM6: Ersatzinvestition ist optional — berechne beide Szenarien und wähle das bessere
-    if hm_key in ('hm5', 'hm6'):
-        battery_no = calc_battery(general, hm_key, hm_p, hme_p, allow_ersatz=False)
-        battery_yes = calc_battery(general, hm_key, hm_p, hme_p, allow_ersatz=True)
-        years_no = run_years(battery_no)
-        years_yes = run_years(battery_yes)
-        npv_no = sum(y["cf_tilgung"] for y in years_no)
-        npv_yes = sum(y["cf_tilgung"] for y in years_yes)
-        if npv_yes > npv_no:
-            battery = battery_yes
-            years_data = years_yes
-        else:
-            battery = battery_no
-            years_data = years_no
-    else:
-        battery = calc_battery(general, hm_key, hm_p, hme_p)
-        years_data = run_years(battery)
+    # Batterie berechnen — HM5/HM6 enthalten wirtschaftliche Prüfung für Ersatzinvestition
+    battery = calc_battery(general, hm_key, hm_p, hme_p,
+                           prod_data=production, spot_data=prices, all_params=params)
+    years_data = run_years(battery)
 
     kpis = calc_kpis(years_data, general)
 

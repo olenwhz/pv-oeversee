@@ -17,9 +17,9 @@ const HM_DESCS = {
   hm1: 'EEG anzulegender Wert + DV-Bonus (J11–20)',
   hm2: 'Nur EEG anzulegender Wert (kein Bonus J11–20)',
   hm3: 'Batterie Profit-Share + PV Fixvergütung (J11–20)',
-  hm4: 'Vollständiger Profit-Share + EEG-Komponente (hohe Zyklen)',
-  hm5: 'Profit-Share + EEG + einmalige Batterieersatzinvestition',
-  hm6: 'Batterie Profit-Share + hohe PV-Fixvergütung (J11–20)',
+  hm4: 'Ganzheitl. Profit-Share + EEG-Zuschlag — fixe 1,23 Zyklen/Tag (Innovationsausschreibung)',
+  hm5: 'Vollst. Profit-Share + EEG — Zyklen optimierbar, Ersatzinvest. nur wenn wirtschaftlich',
+  hm6: 'Hybrid: Batterie PS + PV Fixvergütung, kein EEG — freie Zyklen, opt. Ersatzinvest.',
 }
 
 function fmt(v) { return v !== null && v !== undefined ? Math.round(v).toLocaleString('de-DE') : '—' }
@@ -68,11 +68,17 @@ export default function HMDetail() {
     })
   }
 
+  const ersatzJahr = data.battery?.ersatz_jahr
   const pills = [
     { l: 'NPV 30J', v: fmt(kpis.npv_30) + ' €' },
     { l: 'IRR', v: fmtPct(kpis.irr) },
     { l: 'DSCR', v: kpis.dscr_ok ? '✓ erfüllt' : '✗ nicht erfüllt', ok: kpis.dscr_ok },
     { l: 'Amort.', v: kpis.amort_dyn_30 ? `Jahr ${kpis.amort_dyn_30}` : 'n/a' },
+    ...(['hm5', 'hm6'].includes(hm) ? [{
+      l: 'Ersatzinvest.',
+      v: ersatzJahr ? `Jahr ${ersatzJahr}` : 'nicht lohnend',
+      ok: ersatzJahr ? true : null,
+    }] : []),
   ]
 
   return (
@@ -175,7 +181,9 @@ export default function HMDetail() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr style={{ background: '#fafafa', borderBottom: '1px solid #e8e8ed' }}>
-                {['J', 'Prod. MWh', 'Erlöse', 'OPEX', 'AfA', 'EBIT', 'Zinsen', 'EBT', 'GewSt', 'EAT', 'CF Steuern', 'Tilgung', 'CF Tilgung', 'DSCR'].map(h => (
+                {['J', 'Prod. MWh', 'Erlöse', 'OPEX', 'AfA', 'EBIT', 'Zinsen', 'EBT', 'GewSt', 'EAT', 'CF Steuern', 'Tilgung', 'CF Tilgung', 'DSCR',
+                  ...(['hm5', 'hm6'].includes(hm) ? ['Ersatzinvest.'] : [])
+                ].map(h => (
                   <th key={h} style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600, color: '#86868b', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -201,6 +209,11 @@ export default function HMDetail() {
                     <td style={{ padding: '7px 10px', textAlign: 'right', color: dscr === null ? '#86868b' : dscr >= 1.08 ? '#00875a' : '#cc0000' }}>
                       {dscr !== null && dscr !== undefined ? dscr.toFixed(3) : '—'}
                     </td>
+                    {['hm5', 'hm6'].includes(hm) && (
+                      <td style={{ padding: '7px 10px', textAlign: 'right', color: ersatzJahr === y.year ? '#ff9f0a' : '#86868b', fontWeight: ersatzJahr === y.year ? 600 : 400 }}>
+                        {ersatzJahr === y.year ? fmt(data.battery.ersatz_kosten) + ' €' : '—'}
+                      </td>
+                    )}
                   </tr>
                 )
               })}

@@ -44,6 +44,18 @@ function ParamRow({ label, hint, value, onChange, step = 0.001, min, max }) {
   )
 }
 
+function InfoRow({ label, info, value }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: 16, alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f5f5f7' }}>
+      <div>
+        <div style={{ fontSize: 14, fontWeight: 500, color: '#1d1d1f' }}>{label}</div>
+        {info && <div style={{ fontSize: 12, color: '#86868b', marginTop: 2 }}>{info}</div>}
+      </div>
+      <div style={{ fontSize: 13, color: '#86868b', textAlign: 'right', padding: '8px 12px', background: '#f5f5f7', borderRadius: 8 }}>{value}</div>
+    </div>
+  )
+}
+
 export default function Parameters() {
   const { params, setParams, forceCalculate } = useApp()
   const [open, setOpen] = useState({ general: true, ps: false, hm1: false, hm2: false, hm3: false, hm4: false, hm5: false, hm6: false, hme: false })
@@ -130,29 +142,31 @@ export default function Parameters() {
           { k: 'fix_verguetung_pv_11_20', l: 'Fixvergütung PV Jahre 11–20 (€/kWh)', s: 0.0001 },
           { k: 'dv_kosten_11_20', l: 'DV-Kosten p.a. Jahre 11–20 (€)', s: 100 },
         ]},
-        { key: 'hm4', label: 'HM4 – Vollständiger Profit-Share', fields: [
+        { key: 'hm4', label: 'HM4 – Ganzheitl. Profit-Share + EEG', fields: [
           { k: 'dv_bonus_1_10', l: 'DV-Bonus Jahre 1–10', s: 0.001 },
           { k: 'dv_kosten_11_20', l: 'DV-Kosten p.a. Jahre 11–20 (€)', s: 100 },
-          { k: 'zyklen_11_20', l: 'Zyklen/Tag Jahre 11–20', s: 0.01, min: 0, max: 4.5 },
+          { type: 'info', l: 'Zyklen/Tag', info: 'Innovationsausschreibung — fixe 1,23 Zyklen/Tag, keine Erhöhung erlaubt', value: 'fix 1,23' },
         ]},
-        { key: 'hm5', label: 'HM5 – PS + EEG + Batterieersatz', fields: [
+        { key: 'hm5', label: 'HM5 – Vollst. PS + EEG + opt. Ersatzinvest.', fields: [
           { k: 'dv_bonus_1_10', l: 'DV-Bonus Jahre 1–10', s: 0.001 },
-          { k: 'untergrenze_kapazitaet', l: 'Untergrenze Kapazität (kWh)', s: 10 },
-          { k: 'zyklen_11_20', l: 'Zyklen/Tag Jahre 11–20', s: 0.01, min: 0, max: 4.5 },
+          { k: 'untergrenze_kapazitaet', l: 'Kapazitäts-Schwelle (kWh)', h: 'Bei Unterschreitung wird geprüft ob Ersatz (2.926.080 €) sich lohnt', s: 10 },
+          { k: 'zyklen_11_20', l: 'Zyklen/Tag Jahre 11–20 (optimierbar)', s: 0.01, min: 0, max: 4.5 },
           { k: 'dv_kosten_11_20', l: 'DV-Kosten p.a. Jahre 11–20 (€)', s: 100 },
         ]},
-        { key: 'hm6', label: 'HM6 – Batterie PS + Fix-PV (hoch)', fields: [
+        { key: 'hm6', label: 'HM6 – Hybrid PS + Fix-PV + opt. Ersatzinvest.', fields: [
           { k: 'dv_bonus_1_10', l: 'DV-Bonus Jahre 1–10', s: 0.001 },
-          { k: 'zyklen_11_20', l: 'Zyklen/Tag Jahre 11–20', s: 0.01, min: 0, max: 4.5 },
+          { k: 'zyklen_11_20', l: 'Zyklen/Tag Jahre 11–20 (optimierbar)', s: 0.01, min: 0, max: 4.5 },
           { k: 'fix_verguetung_pv_11_20', l: 'Fixvergütung PV Jahre 11–20 (€/kWh)', s: 0.001 },
           { k: 'dv_kosten_11_20', l: 'DV-Kosten p.a. Jahre 11–20 (€)', s: 100 },
+          { k: 'untergrenze_kapazitaet', l: 'Kapazitäts-Schwelle (kWh)', h: 'Bei Unterschreitung wird geprüft ob Ersatz (2.926.080 €) sich lohnt', s: 10 },
         ]},
       ].map(({ key, label, fields }) => (
         <Section key={key} title={label} open={open[key]} onToggle={() => toggle(key)}>
           <div style={{ paddingTop: 16 }}>
-            {fields.map(f => (
-              <ParamRow key={f.k} label={f.l} value={params[key][f.k]} onChange={v => upd(key, f.k, v)} step={f.s} min={f.min} max={f.max} />
-            ))}
+            {fields.map(f => f.type === 'info'
+              ? <InfoRow key={f.l} label={f.l} info={f.info} value={f.value} />
+              : <ParamRow key={f.k} label={f.l} hint={f.h} value={params[key][f.k]} onChange={v => upd(key, f.k, v)} step={f.s} min={f.min} max={f.max} />
+            )}
           </div>
         </Section>
       ))}
