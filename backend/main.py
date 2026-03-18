@@ -23,6 +23,11 @@ app.add_middleware(
 )
 
 
+@app.get("/health")
+def health():
+    return {"ok": True}
+
+
 @app.get("/api/defaults")
 def get_defaults():
     return AllParams().model_dump()
